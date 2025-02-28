@@ -95,8 +95,6 @@ class Mice_Inspection():
         os.makedirs(self.output_dir, exist_ok = True)
         self.op = op
         self.subjects = 8
-        if not os.path.exists(op[0]):
-            self.format_mice_dataframes(ip, op)
         self.sample_size = 3000
         self.tot_species = 0
         self.species_list = None
@@ -104,6 +102,8 @@ class Mice_Inspection():
         self.mice_df = None
         self.metadata_df = None
         self.get_metadata(mdp)
+        if not os.path.exists(op[0]):
+            self.format_mice_dataframes(ip, op)
         self.get_mice_df()
 
     def get_metadata(self, mdp, verbose = False):
@@ -445,6 +445,10 @@ class Mice_Inspection():
         Saves dataframe to .csv file "Data/by_species/[species name].csv"
         Columns are [day, mouse_1, mouse_2, mouse_3, ... , mouse_N]
         """""
+
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
         if not species in self.species_list:
             raise ValueError("Species name is invalid")
         day_max = int(self.mice_df[0].columns[-1]) # mouse 1 lives the longest
