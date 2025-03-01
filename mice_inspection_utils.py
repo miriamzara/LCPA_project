@@ -791,8 +791,6 @@ def bin_counts(data, lower, upper):
     count = len(filtered_data)
     return count
 
-
-
 #Select subset of times list where consecutive times are separated by at least cutoff days
 def extract_subset(time_instants, cutoff):
     subset = [time_instants[0]]
