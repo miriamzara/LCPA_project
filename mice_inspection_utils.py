@@ -74,9 +74,6 @@ class Mice_Inspection():
     def plot_dissimilarities_in_pdf(mice_diss, output_dir="Inspection_Outputs", n_species_per_plot=5, window_size=10, ma = True): 
         Plot all the dissimilarities on different pdfs (5 species at a time) for every mouse. 
 
-    def plot_first_dissimilarities(self, nsp = 5): 
-        Plot the first nsp dissimilarities where species are sorted by abundances and are averaged across mice. 
-
     format_for_regression():
 
     Outputs: 
@@ -691,13 +688,6 @@ def plot_dissimilarities_in_pdf(mice_diss, output_dir="Inspection_Outputs", n_sp
         
         print(f"Plots saved in {pdf_path}")
     return 
-    
-def plot_first_dissimilarities(self, mouse, nsp = 5): 
-    """
-    Consider the first 5 species in order of abundance and make a plot
-    """
-    
-    return
 
 def format_for_regression(self, subject = 1, max_rank = 10, sampling_interval = 1):
     """""
