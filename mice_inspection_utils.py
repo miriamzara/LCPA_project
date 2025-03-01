@@ -7,10 +7,12 @@ import re
 import os
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from matplotlib.ticker import MaxNLocator
 from scipy.interpolate import CubicSpline
 import matplotlib.cm as cm
 from scipy.optimize import minimize
 import math
+from matplotlib.backends.backend_pdf import PdfPages
 
 class Mice_Inspection():
     """
@@ -62,12 +64,18 @@ class Mice_Inspection():
         Creates and saves the aggregated data of species in a csv file where the first column is days and subsequent
         columns correspond to mice.
     
+    plot_species(list):
+        Plots the time series of abundances for the selected list of species. Returns pdf file(s) containing the plots.
+        
     get_dissimilarities_df(mouse):
         Computes and saves dissimilarities for each species (rows) and for each time lag (columns) in the correspondent mouse dataset.
         The  output files are saved in the 'Data/dissimilarities' directory with filenames 'dissimilarity_<mouse>.csv'
     
-    plot_species(list):
-        Plots the time series of abundances for the selected list of species. Returns pdf file(s) containing the plots.
+    def plot_dissimilarities_in_pdf(mice_diss, output_dir="Inspection_Outputs", n_species_per_plot=5, window_size=10, ma = True): 
+        Plot all the dissimilarities on different pdfs (5 species at a time) for every mouse. 
+
+    def plot_first_dissimilarities(self, nsp = 5): 
+        Plot the first nsp dissimilarities where species are sorted by abundances and are averaged across mice. 
 
     format_for_regression():
 
@@ -641,67 +649,114 @@ class Mice_Inspection():
         # Return the DataFrame as output
         return dissimilarity_df
     
-    def plot_dissimilarities(self, mouse): 
-        return 
+def moving_average(data, window_size=5):
+    return np.convolve(data, np.ones(window_size)/window_size, mode='valid')
 
-    def format_for_regression(self, subject = 1, max_rank = 10, sampling_interval = 1):
-        """""
-        Returns the dataframe ready to pass to the Fisher.LIMITS() routine
-        Data is interpolated using
-        """""
-        imput_path = f'Data/mouse_{subject}_transposed.csv'
-        if not os.path.exists(imput_path):
-            self.transpose_mice_df()
-        df = pd.read_csv(imput_path)
-        selected_species = self.select_species(max_rank= max_rank)
-        if not (isinstance(sampling_interval, int) and sampling_interval > 0):
-            raise ValueError("the sampling interval must be an integer number of days")
-        regression_df_list = []
-        for n in range(self.subjects):
-            df =  self.mice_df[n].copy()
-            times = df.columns[4:].to_list()
-            medians_dict = {}
-            means_dict = {}
-            for i, row in df.iterrows():
-                medians_dict[row['species']] = row['median_counts']
-                means_dict[row['species']] = row['mean_counts']
-            df.drop(columns=['median_counts', 'mean_counts', 'Unnamed: 0'], inplace = True)
-            df = df.set_index('species').transpose()
-            df.insert(0, 'day', times)
-            columns_to_keep = ['day']
-            columns_to_keep.extend(selected_species) #adds columns, names given by elements in list "selected_species"
-            df = df[columns_to_keep]
-            print(f"mouse {n+1}", df.head())
-
-            #pairs = [(times[i], times[i + 1]) for i in range(len(times) - 1) if times[i + 1] - times[i] == sampling_interval]
-            #for pair in pairs:
-        """""
-        Computes the variables needed to perform linear regression. Deletes all imput_data rows containing near zero values (because log is undefined)
-        Stores as numpy nd array  self.data, with nrows = timesteps - 1 - deleted rows , ncols = 2 * num_species
-        Caution: some covariate columns may contain inf and nan values. This happens when the species is extinct.
-        These rows are deleted when regression over the corresponding species is performed.
+def plot_dissimilarities_in_pdf(mice_diss, output_dir="Inspection_Outputs", n_species_per_plot=5, window_size=10, ma = True):
+    """
+    This function takes as inputs: 
+        mice_diss: list of dissimilarity data_frames for each mouse
+        output_dir: directory where you want to save the pdf
+        n_species_per_plot: how many species you want per plot
+        if ma = True: you're computing the moving average, you should also indicate the window_size for the average
+    """
+    os.makedirs(output_dir, exist_ok=True)  # Ensure the output directory exists
+    
+    for mouse_idx, df in enumerate(mice_diss):  # Iterate through each mouse's dataframe
+        pdf_path = os.path.join(output_dir, f"dissimilarity_{mouse_idx + 1}_plot.pdf")
+        species = np.asarray(df.index)  # Get all species
+        lags = np.asarray(df.columns)  # Get lags
         
-        #transposed_data = self.input_data[:, :]
-        transposed_data = np.transpose(self.input_data[:, :])
+        with PdfPages(pdf_path) as pdf:
+            for i in range(0, len(species), n_species_per_plot):
+                selected_species = species[i:i + n_species_per_plot]
+                
+                plt.figure(figsize=(10, 6))
+                for sp in selected_species:
+                    data = df.loc[sp].values
+                    if ma: 
+                        smoothed_data = moving_average(data, window_size=window_size)
+                        plt.plot(lags[:len(smoothed_data)], smoothed_data, label=sp)
+                    else: 
+                        plt.plot(lags, data, label=sp)
+                
+                plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+                plt.xticks(rotation=45)
+                plt.legend()
+                plt.xlabel("Lags")
+                plt.ylabel("Smoothed Values")
+                plt.title(f"Mouse {mouse_idx + 1}: Species {i+1} to {min(i+n_species_per_plot, len(species))}")
+                pdf.savefig()
+                plt.close()
+        
+        print(f"Plots saved in {pdf_path}")
+    return 
+    
+def plot_first_dissimilarities(self, mouse, nsp = 5): 
+    """
+    Consider the first 5 species in order of abundance and make a plot
+    """
+    
+    return
 
-        temp = np.log(transposed_data)
-        #inf_mask = np.isinf(temp)
-        #rows_with_inf = np.any(inf_mask, axis=1)
-        #transposed_data = transposed_data[~rows_with_inf]
-        #if len(transposed_data) == 0:
-        #    raise ValueError("Some species is extinct right from the start. Please compute initial conditions again.")
+def format_for_regression(self, subject = 1, max_rank = 10, sampling_interval = 1):
+    """""
+    Returns the dataframe ready to pass to the Fisher.LIMITS() routine
+    Data is interpolated using
+    """""
+    imput_path = f'Data/mouse_{subject}_transposed.csv'
+    if not os.path.exists(imput_path):
+        self.transpose_mice_df()
+    df = pd.read_csv(imput_path)
+    selected_species = self.select_species(max_rank= max_rank)
+    if not (isinstance(sampling_interval, int) and sampling_interval > 0):
+        raise ValueError("the sampling interval must be an integer number of days")
+    regression_df_list = []
+    for n in range(self.subjects):
+        df =  self.mice_df[n].copy()
+        times = df.columns[4:].to_list()
+        medians_dict = {}
+        means_dict = {}
+        for i, row in df.iterrows():
+            medians_dict[row['species']] = row['median_counts']
+            means_dict[row['species']] = row['mean_counts']
+        df.drop(columns=['median_counts', 'mean_counts', 'Unnamed: 0'], inplace = True)
+        df = df.set_index('species').transpose()
+        df.insert(0, 'day', times)
+        columns_to_keep = ['day']
+        columns_to_keep.extend(selected_species) #adds columns, names given by elements in list "selected_species"
+        df = df[columns_to_keep]
+        print(f"mouse {n+1}", df.head())
 
-        log_data = np.zeros(shape= (transposed_data.shape[0] - 1, transposed_data.shape[1]))
-        for t in np.arange(0, transposed_data.shape[0] - 1):
-            for i in range(transposed_data.shape[1]):
-                log_data[t, i] = np.log(transposed_data[t + 1, i]) - np.log(transposed_data[t , i])
-        medians = np.median(transposed_data[:, :self.num_species], axis = 0)
-        for i, m in enumerate(medians):
-            transposed_data[:, i] = transposed_data[:, i] - m
-        self.data = np.hstack((transposed_data[:-1, :], log_data))
+        #pairs = [(times[i], times[i + 1]) for i in range(len(times) - 1) if times[i + 1] - times[i] == sampling_interval]
+        #for pair in pairs:
+    """""
+    Computes the variables needed to perform linear regression. Deletes all imput_data rows containing near zero values (because log is undefined)
+    Stores as numpy nd array  self.data, with nrows = timesteps - 1 - deleted rows , ncols = 2 * num_species
+    Caution: some covariate columns may contain inf and nan values. This happens when the species is extinct.
+    These rows are deleted when regression over the corresponding species is performed.
+    
+    #transposed_data = self.input_data[:, :]
+    transposed_data = np.transpose(self.input_data[:, :])
 
-        """""    
-        return 
+    temp = np.log(transposed_data)
+    #inf_mask = np.isinf(temp)
+    #rows_with_inf = np.any(inf_mask, axis=1)
+    #transposed_data = transposed_data[~rows_with_inf]
+    #if len(transposed_data) == 0:
+    #    raise ValueError("Some species is extinct right from the start. Please compute initial conditions again.")
+
+    log_data = np.zeros(shape= (transposed_data.shape[0] - 1, transposed_data.shape[1]))
+    for t in np.arange(0, transposed_data.shape[0] - 1):
+        for i in range(transposed_data.shape[1]):
+            log_data[t, i] = np.log(transposed_data[t + 1, i]) - np.log(transposed_data[t , i])
+    medians = np.median(transposed_data[:, :self.num_species], axis = 0)
+    for i, m in enumerate(medians):
+        transposed_data[:, i] = transposed_data[:, i] - m
+    self.data = np.hstack((transposed_data[:-1, :], log_data))
+
+    """""    
+    return 
 
 def non_neg_spline(x, y):
     # Minimize the set of coefficients a_i (aka control points)
