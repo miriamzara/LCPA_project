@@ -61,7 +61,11 @@ class Mice_Inspection():
     get_species_df(species):
         Creates and saves the aggregated data of species in a csv file where the first column is days and subsequent
         columns correspond to mice.
-
+    
+    get_dissimilarities_df(mouse):
+        Computes and saves dissimilarities for each species (rows) and for each time lag (columns) in the correspondent mouse dataset.
+        The  output files are saved in the 'Data/dissimilarities' directory with filenames 'dissimilarity_<mouse>.csv'
+    
     plot_species(list):
         Plots the time series of abundances for the selected list of species. Returns pdf file(s) containing the plots.
 
@@ -104,7 +108,7 @@ class Mice_Inspection():
         self.get_metadata(mdp)
         if not os.path.exists(op[0]):
             self.format_mice_dataframes(ip, op)
-        self.get_mice_df()
+        self.get_mice_df() # This method loads the processed data into self.mice_df
 
     def get_metadata(self, mdp, verbose = False):
         """
@@ -437,7 +441,6 @@ class Mice_Inspection():
             plt.savefig(output_path)
         return 
 
-
     def get_species_df(self, species = 'Prevotella sp. Smarlab 121567', output_dir = "Data/by_species", plot_fig = True, save_fig = True) -> Union[list, pd.DataFrame]:
         """"
         Returns the aggregated dataframe containing the timeseries
@@ -484,7 +487,6 @@ class Mice_Inspection():
         output_path = os.path.join(output_dir, f"{species}.csv")
         species_df.to_csv(output_path)
         return species_df
-
 
     def plot_species(self, interpolate: str = None, species_list = ['Prevotella sp. Smarlab 121567'],  subjects: list = None,  save_fig = False) -> None:
         """
@@ -591,6 +593,56 @@ class Mice_Inspection():
                 plt.close()
         return
 
+    def get_dissimilarities(self, mouse):
+        """
+        Computes dissimilarities for each species in a given mouse dataset.
+        The output is a DataFrame where each row corresponds to a species, and columns are time lags (T).
+        Only valid time lags (with computed dissimilarities) will appear as columns.
+        """
+        output_dir = 'Data/dissimilarities'
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, f'dissimilarity_{mouse}.csv')
+
+        # Select mouse dataframe
+        mouse_df = self.mice_df[mouse - 1]
+        days = mouse_df.columns[4:].to_numpy(dtype=int)  # Days are from the 5th column onward
+        max_T = np.max(days)
+
+        # Initialize a dictionary to store dissimilarities for each species
+        dissimilarity_data = {sp: {} for sp in mouse_df['species'].to_numpy()}
+
+        # Precompute which days + T are valid for each day
+        valid_day_pairs = {T: {day for day in days if (day + T) in days} for T in range(1, max_T + 1)}
+
+        # For each species, compute dissimilarities by time lag
+        for sp_idx, sp in enumerate(mouse_df['species'].to_numpy()):
+            for T in range(1, max_T + 1):
+                total_diss = 0
+                count = 0
+                for day in valid_day_pairs[T]:
+                    diss_t = ((mouse_df[day][sp_idx] - mouse_df[day + T][sp_idx]) / 
+                            max(1, (mouse_df[day][sp_idx] + mouse_df[day + T][sp_idx])))**2
+                    total_diss += diss_t
+                    count += 1
+
+                # Only store dissimilarities for time lags with valid days
+                if count > 0:
+                    dissimilarity_data[sp][f'{T}'] = total_diss / count
+
+        # Convert the dissimilarity data dictionary to a DataFrame
+        dissimilarity_df = pd.DataFrame.from_dict(dissimilarity_data, orient='index')
+
+        # Save the DataFrame to a CSV file
+        dissimilarity_df.to_csv(output_path)
+
+        # Print a message with the output path
+        print(f"Dissimilarities saved for mouse {mouse} at {output_path}")
+        
+        # Return the DataFrame as output
+        return dissimilarity_df
+    
+    def plot_dissimilarities(self, mouse): 
+        return 
 
     def format_for_regression(self, subject = 1, max_rank = 10, sampling_interval = 1):
         """""
@@ -651,8 +703,6 @@ class Mice_Inspection():
         """""    
         return 
 
-
-
 def non_neg_spline(x, y):
     # Minimize the set of coefficients a_i (aka control points)
     def constraint_func(a):
@@ -707,9 +757,6 @@ def extract_subset(time_instants, cutoff):
             subset.append(time_instants[i])
             original_indices_df.append(i)
     return subset, original_indices_df
-
-
-
 
 """""
 compute Pearson matrix
