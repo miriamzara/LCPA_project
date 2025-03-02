@@ -67,9 +67,10 @@ class Mice_Inspection():
     plot_species(list):
         Plots the time series of abundances for the selected list of species. Returns pdf file(s) containing the plots.
         
-    get_dissimilarities_df(mouse):
-        Computes and saves dissimilarities for each species (rows) and for each time lag (columns) in the correspondent mouse dataset.
+    get_dissimilarities_df(mouse, write = True): 
+        Computes and saves (only if write = True) dissimilarities for each species (rows) and for each time lag (columns) in the correspondent mouse dataset.
         The  output files are saved in the 'Data/dissimilarities' directory with filenames 'dissimilarity_<mouse>.csv'
+        Only valid time lags (with computed dissimilarities) will appear as columns.
     
     def plot_dissimilarities_in_pdf(mice_diss, output_dir="Inspection_Outputs", n_species_per_plot=5, window_size=10, ma = True): 
         Plot all the dissimilarities on different pdfs (5 species at a time) for every mouse. 
@@ -598,15 +599,16 @@ class Mice_Inspection():
                 plt.close()
         return
 
-    def get_dissimilarities(self, mouse):
+    def get_dissimilarities(self, mouse, write = True):
         """
-        Computes dissimilarities for each species in a given mouse dataset.
+        Computes dissimilarities for each species in a given mouse dataset and saves values in a csv file if write = True
         The output is a DataFrame where each row corresponds to a species, and columns are time lags (T).
         Only valid time lags (with computed dissimilarities) will appear as columns.
         """
-        output_dir = 'Data/dissimilarities'
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, f'dissimilarity_{mouse}.csv')
+        if write: 
+            output_dir = 'Data/dissimilarities'
+            os.makedirs(output_dir, exist_ok=True)
+            output_path = os.path.join(output_dir, f'dissimilarity_{mouse}.csv')
 
         # Select mouse dataframe
         mouse_df = self.mice_df[mouse - 1]
@@ -638,10 +640,10 @@ class Mice_Inspection():
         dissimilarity_df = pd.DataFrame.from_dict(dissimilarity_data, orient='index')
 
         # Save the DataFrame to a CSV file
-        dissimilarity_df.to_csv(output_path)
-
-        # Print a message with the output path
-        print(f"Dissimilarities saved for mouse {mouse} at {output_path}")
+        if write: 
+            dissimilarity_df.to_csv(output_path)
+            # Print a message with the output path
+            print(f"Dissimilarities saved for mouse {mouse} at {output_path}")
         
         # Return the DataFrame as output
         return dissimilarity_df
