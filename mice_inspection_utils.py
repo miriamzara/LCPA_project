@@ -651,7 +651,7 @@ class Mice_Inspection():
 def moving_average(data, window_size=5):
     return np.convolve(data, np.ones(window_size)/window_size, mode='valid')
 
-def plot_dissimilarities_in_pdf(mice_diss, output_dir="Inspection_Outputs", n_species_per_plot=5, window_size=10, ma = True):
+def plot_dissimilarities_in_pdf(mice_diss, output_dir="Inspection_Outputs\dissimilarityplots", n_species_per_plot=5, window_size=10, ma = True):
     """
     This function takes as inputs: 
         mice_diss: list of dissimilarity data_frames for each mouse
@@ -685,6 +685,47 @@ def plot_dissimilarities_in_pdf(mice_diss, output_dir="Inspection_Outputs", n_sp
                 plt.xlabel("Lags")
                 plt.ylabel("Smoothed Values")
                 plt.title(f"Mouse {mouse_idx + 1}: Species {i+1} to {min(i+n_species_per_plot, len(species))}")
+                pdf.savefig()
+                plt.close()
+        
+        print(f"Plots saved in {pdf_path}")
+    return 
+
+from scipy.stats import linregress
+
+
+def plot_dissfit_in_pdf(mice_diss, output_dir="Inspection_Outputs\dissimilarityfit", n_species_per_plot=5):
+    """
+    This function takes as inputs: 
+        mice_diss: list of dissimilarity data_frames for each mouse
+        output_dir: directory where you want to save the pdf
+        n_species_per_plot: how many species you want per plot
+    """
+    os.makedirs(output_dir, exist_ok=True)  # Ensure the output directory exists
+
+    for mouse_idx, mouse_df in enumerate(mice_diss):  # Iterate through each mouse's dataframe
+        pdf_path = os.path.join(output_dir, f"dissimilarity_{mouse_idx + 1}_fit.pdf")
+        species = np.asarray(mouse_df.index)  # Get all species
+        lags = np.asarray(mouse_df.columns, dtype = int)  # Get lags
+
+        with PdfPages(pdf_path) as pdf:
+            for i in range(0, len(species), n_species_per_plot):
+                selected_species = species[i:i + n_species_per_plot]
+
+                plt.figure(figsize=(10, 6))
+                for sp in selected_species:
+                    data = mouse_df.loc[sp].values
+                    m, q, *_ = linregress(lags, data)
+                    pred_data = m*lags + q
+                    plt.scatter(lags, data, s = 0.3, label = sp)
+                    plt.plot(lags, pred_data)
+
+                plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+                plt.xticks(rotation=45)
+                plt.legend()
+                plt.xlabel("Time Lags")
+                plt.ylabel("Dissimilarity")
+                plt.title(f"Mouse {mouse_idx + 1}: dissimilarities from species {i+1} to {min(i+n_species_per_plot, len(species))}")
                 pdf.savefig()
                 plt.close()
         
