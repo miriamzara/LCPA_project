@@ -75,6 +75,15 @@ class Mice_Inspection():
     def plot_dissimilarities_in_pdf(mice_diss, output_dir="Inspection_Outputs", n_species_per_plot=5, window_size=10, ma = True): 
         Plot all the dissimilarities on different pdfs (5 species at a time) for every mouse. 
 
+    def params_to_pdf(mi, mice_ab, objective, bounds, LM, find_transient_end, file_path="parameters_data.npz", force_recompute=False)
+        Save in pdf the parameters obtained with LM fit for all mice and all species
+        
+    def params_to_csv(mi, mice_ab, objective, bounds, LM, find_transient_end, force_recompute=False):
+        This function processes the species abundance data for multiple mice, fits the logistic model 
+        to each species' time series using optimization, computes theoretical estimates for the carrying 
+        capacity (K), tau (time constant), and sigma (variance-related parameter), and saves the results 
+        in CSV files.
+
     format_for_regression():
 
     Outputs: 
@@ -704,9 +713,6 @@ def plot_dissimilarities_in_pdf(mice_diss, output_dir=r"Inspection_Outputs\dissi
             print(f"Plots saved in {pdf_path}")
     return 
 
-from scipy.stats import linregress
-
-
 def plot_dissfit_in_pdf(mice_diss, output_dir=r"Inspection_Outputs\dissimilarityfit", n_species_per_plot=5):
     """
     This function takes as inputs: 
@@ -748,6 +754,238 @@ def plot_dissfit_in_pdf(mice_diss, output_dir=r"Inspection_Outputs\dissimilarity
             
             print(f"Plots saved in {pdf_path}")
         return 
+
+def params_to_pdf(mi, mice_ab, objective, bounds, LM, find_transient_end, file_path="parameters_data.npz", force_recompute=False):
+    if not os.path.exists(file_path) or force_recompute:  
+        num_mice = len(mi.mice_df)
+        num_species = max(len(df['species']) for df in mice_ab)
+        parameters = np.zeros((num_mice, num_species, 3))
+
+        for mouse_num, df in enumerate(mice_ab):  # Loop over all mice
+            species = df['species']
+
+            with PdfPages(f"Mouse_{mouse_num+1}_LM_Fits.pdf") as pdf:
+                fig, ax = plt.subplots(figsize=(8, 6))  # Create a single figure
+                plot_count = 0  # Counter to track species in a single figure
+            
+                for idx, sp in enumerate(species):  # Loop over all species in the mouse
+                    ts_data = df.iloc[idx, 1:].to_numpy()
+                    nonzero = np.nonzero(ts_data)[0]
+
+                    if nonzero.size > 0:  # Ensure there is at least one nonzero value
+                        start_idx = nonzero[0] + 1  # Adjust for skipped species column
+                        time_series = df.iloc[idx, start_idx:].to_numpy()  
+                        days = np.asarray(df.columns[start_idx:], dtype=int)  
+                        dt = np.diff(days)  
+                        result = opt.differential_evolution(objective, bounds, args=(time_series, dt), strategy='best1bin')
+                        K_opt, tau_opt = result.x
+
+                        # Simulate data using optimized parameters
+                        fitted_data = LM(time_series[0], K_opt, tau_opt, len(time_series)-1, dt)
+
+                        # Identify transient phase: Discard data until it reaches carrying capacity
+                        transient_end_idx = find_transient_end(fitted_data)
+                    
+                        # Keep only post-transient data
+                        time_series_red = time_series[transient_end_idx:]
+
+                        # Compute theoretical estimates of K and sigma
+                        var = np.var(time_series_red)
+                        mean = np.mean(time_series_red)
+                        sigma_th = 2 * var / (mean**2 + var)
+                        K_th = mean * 2 / (2 - sigma_th)
+
+                        # Store computed values
+                        parameters[mouse_num, idx, 0] = K_th
+                        parameters[mouse_num, idx, 1] = tau_opt
+                        parameters[mouse_num, idx, 2] = sigma_th
+
+                        # Plot current species in the same figure
+                        ax.scatter(days, time_series, marker='o', s=30, label=f"Species {sp} (Real)")
+                        ax.plot(days, fitted_data, linestyle='--', label=f"Species {sp} (Fitted)")
+
+                        plot_count += 1
+                        if plot_count == 5:
+                            ax.set_xlabel("Time")
+                            ax.set_ylabel("Abundance")
+                            ax.set_xlim(0, 100)
+                            ax.legend()
+                            ax.set_title(f"Mouse {mouse_num+1} - Species Fit")
+                            
+                            pdf.savefig(fig)  # Save current figure to PDF
+                            plt.close(fig)  # Close the current figure
+                            
+                            fig, ax = plt.subplots(figsize=(8, 6))  # Create a new figure
+                            plot_count = 0  # Reset counter
+
+                    else:  # If species is always zero
+                        parameters[mouse_num, idx, :] = [0, 0, 0]
+
+                # Save any remaining plots (if less than 5 species were plotted in the last figure)
+                if plot_count > 0:
+                    ax.set_xlabel("Time")
+                    ax.set_ylabel("Abundance")
+                    ax.set_xlim(0, 100)
+                    ax.legend()
+                    ax.set_title(f"Mouse {mouse_num+1} - Species Fit")
+                    pdf.savefig(fig)  
+                    plt.close(fig)  
+
+            print(f"Saved PDF with LM fit for Mouse {mouse_num+1}")
+
+        # Save parameters
+        print("Shape of parameters array:", parameters.shape)  # Should be (num_mice, num_species, 3)
+        np.savez(file_path, parameters=parameters)
+        print(f"Parameters saved in {file_path}")
+
+    else:
+        loaded_data = np.load(file_path)
+        parameters = loaded_data['parameters']  # Retrieve the 'parameters' array
+        print("Parameters loaded from file")
+    
+    return parameters
+
+import scipy.optimize as opt
+
+def params_to_csv(mi, mice_ab, objective, bounds, LM, find_transient_end, force_recompute=False):
+    """
+    This function processes the species abundance data for multiple mice, fits the logistic model 
+    to each species' time series using optimization, computes theoretical estimates for the carrying 
+    capacity (K), tau (time constant), and sigma (variance-related parameter), and saves the results 
+    in CSV files.
+
+    It checks if the CSV files for K, tau, and sigma already exist. If they do, it loads them unless 
+    the `force_recompute` flag is set to True, in which case the computation is redone. The function 
+    also generates PDF plots showing the model fit for each species and mouse.
+
+    Args:
+    - mi: A data structure containing metadata about the mice (e.g., `mi.mice_df`).
+    - mice_ab: A list of DataFrames containing the species abundance time series for each mouse.
+    - objective: The objective function for the optimization (e.g., the logistic model error).
+    - bounds: The bounds for the optimization parameters (K and tau).
+    - LM: The logistic model function to simulate abundance over time.
+    - find_transient_end: A function to determine where the transient phase ends in the simulated data.
+    - force_recompute (bool, optional): If set to True, forces recomputation even if the CSV files exist. Default is False.
+    
+    Returns:
+    - K_df: DataFrame of carrying capacity estimates (K) for each species and mouse.
+    - tau_df: DataFrame of tau (time constant) estimates for each species and mouse.
+    - sigma_df: DataFrame of sigma (variance-related) estimates for each species and mouse.
+    """
+    
+    file_path_K = "K_values.csv"
+    file_path_tau = "tau_values.csv"
+    file_path_sigma = "sigma_values.csv"
+
+    # Check if the CSV files already exist and if recomputation is required
+    if not os.path.exists(file_path_K) or not os.path.exists(file_path_tau) or not os.path.exists(file_path_sigma) or force_recompute:
+        # Initialize dictionaries to store parameters per mouse
+        K_dict = {}
+        tau_dict = {}
+        sigma_dict = {}
+
+        num_mice = len(mi.mice_df)
+        all_species = sorted(set(sp for df in mice_ab for sp in df['species']))  # Get all unique species
+
+        # Loop over all mice
+        for mouse_num in range(len(mi.mice_df)):  
+            df = mice_ab[mouse_num]
+            species = df['species']
+
+            # Initialize dictionaries for this mouse (default to NaN)
+            K_dict[f"Mouse {mouse_num+1}"] = {sp: np.nan for sp in all_species}
+            tau_dict[f"Mouse {mouse_num+1}"] = {sp: np.nan for sp in all_species}
+            sigma_dict[f"Mouse {mouse_num+1}"] = {sp: np.nan for sp in all_species}
+
+            with PdfPages(f"Mouse_{mouse_num+1}_LM_Fits.pdf") as pdf:
+                fig, ax = plt.subplots(figsize=(8, 6))  # Create a single figure
+                plot_count = 0  # Counter to track species in a single figure
+
+                for idx, sp in enumerate(species):  # Loop over all species in the mouse
+                    ts_data = df.iloc[idx, 1:].to_numpy()
+                    nonzero = np.nonzero(ts_data)[0]
+
+                    if nonzero.size > 0:  # Ensure there is at least one nonzero value
+                        start_idx = nonzero[0] + 1  # Adjust for skipped species column
+                        time_series = df.iloc[idx, start_idx:].to_numpy()
+                        days = np.asarray(df.columns[start_idx:], dtype=int)
+                        dt = np.diff(days)
+                        result = opt.differential_evolution(objective, bounds, args=(time_series, dt), strategy='best1bin')
+                        K_opt, tau_opt = result.x
+
+                        # Simulate data using optimized parameters
+                        fitted_data = LM(time_series[0], K_opt, tau_opt, len(time_series)-1, dt)
+
+                        # Identify transient phase: Discard data until it reaches carrying capacity
+                        transient_end_idx = find_transient_end(fitted_data)
+
+                        # Keep only post-transient data
+                        time_series_red = time_series[transient_end_idx:]
+
+                        # Compute theoretical estimates of K and sigma
+                        var = np.var(time_series_red)
+                        mean = np.mean(time_series_red)
+                        sigma_th = 2 * var / (mean**2 + var)
+                        K_th = mean * 2 / (2 - sigma_th)
+
+                        # Store computed values in dictionaries
+                        K_dict[f"Mouse {mouse_num+1}"][sp] = K_th
+                        tau_dict[f"Mouse {mouse_num+1}"][sp] = tau_opt
+                        sigma_dict[f"Mouse {mouse_num+1}"][sp] = sigma_th
+
+                        # Plot current species in the same figure
+                        ax.scatter(days, time_series, marker='o', s=30, label=f"Species {sp} (Real)")
+                        ax.plot(days, fitted_data, linestyle='--', label=f"Species {sp} (Fitted)")
+
+                        plot_count += 1
+                        if plot_count == 5:
+                            ax.set_xlabel("Time")
+                            ax.set_ylabel("Abundance")
+                            ax.set_xlim(0, 100)
+                            ax.legend()
+                            ax.set_title(f"Mouse {mouse_num+1} - Species Fit")
+                            
+                            pdf.savefig(fig)  # Save current figure to PDF
+                            plt.close(fig)  # Close the current figure
+                            
+                            fig, ax = plt.subplots(figsize=(8, 6))  # Create a new figure
+                            plot_count = 0  # Reset counter
+
+                    else:  # If species is always zero, store 0 values
+                        K_dict[f"Mouse {mouse_num+1}"][sp] = 0
+                        tau_dict[f"Mouse {mouse_num+1}"][sp] = 0
+                        sigma_dict[f"Mouse {mouse_num+1}"][sp] = 0
+            print(f"Saved PDF with LM fit for Mouse {mouse_num+1}")
+
+        # Convert dictionaries to DataFrames
+        K_df = pd.DataFrame(K_dict)
+        tau_df = pd.DataFrame(tau_dict)
+        sigma_df = pd.DataFrame(sigma_dict)
+
+        # Save DataFrames to CSV files
+        K_df.to_csv(file_path_K)
+        tau_df.to_csv(file_path_tau)
+        sigma_df.to_csv(file_path_sigma)
+        print("Parameters dataframes saved in csv files")
+
+        # Display DataFrames
+        print("K Values DataFrame:")
+        print(K_df)
+
+        print("Tau Values DataFrame:")
+        print(tau_df)
+
+        print("Sigma Values DataFrame:")
+        print(sigma_df)
+
+    else:
+        K_df = pd.read_csv(file_path_K)
+        tau_df = pd.read_csv(file_path_tau)
+        sigma_df = pd.read_csv(file_path_sigma)
+        print('Loaded K, sigma, tau dataframes from csv files')
+
+    return K_df, tau_df, sigma_df
+
 
 def format_for_regression(self, subject = 1, max_rank = 10, sampling_interval = 1):
     """""
