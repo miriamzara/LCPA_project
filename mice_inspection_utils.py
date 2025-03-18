@@ -651,86 +651,103 @@ class Mice_Inspection():
 def moving_average(data, window_size=5):
     return np.convolve(data, np.ones(window_size)/window_size, mode='valid')
 
-def plot_dissimilarities_in_pdf(mice_diss, output_dir="Inspection_Outputs\dissimilarityplots", n_species_per_plot=5, window_size=10, ma = True):
-    """
-    This function takes as inputs: 
-        mice_diss: list of dissimilarity data_frames for each mouse
-        output_dir: directory where you want to save the pdf
-        n_species_per_plot: how many species you want per plot
-        if ma = True: you're computing the moving average, you should also indicate the window_size for the average
-    """
-    os.makedirs(output_dir, exist_ok=True)  # Ensure the output directory exists
+
+def plot_dissimilarities_in_pdf(mice_diss, output_dir=r"Inspection_Outputs\dissimilarityplots", n_species_per_plot=5, window_size=10, ma = True):
     
-    for mouse_idx, df in enumerate(mice_diss):  # Iterate through each mouse's dataframe
-        pdf_path = os.path.join(output_dir, f"dissimilarity_{mouse_idx + 1}_plot.pdf")
-        species = np.asarray(df.index)  # Get all species
-        lags = np.asarray(df.columns)  # Get lags
-        
-        with PdfPages(pdf_path) as pdf:
-            for i in range(0, len(species), n_species_per_plot):
-                selected_species = species[i:i + n_species_per_plot]
-                
-                plt.figure(figsize=(10, 6))
-                for sp in selected_species:
-                    data = df.loc[sp].values
-                    if ma: 
-                        smoothed_data = moving_average(data, window_size=window_size)
-                        plt.plot(lags[:len(smoothed_data)], smoothed_data, label=sp)
-                    else: 
-                        plt.plot(lags, data, label=sp)
-                
-                plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
-                plt.xticks(rotation=45)
-                plt.legend()
-                plt.xlabel("Lags")
-                plt.ylabel("Smoothed Values")
-                plt.title(f"Mouse {mouse_idx + 1}: Species {i+1} to {min(i+n_species_per_plot, len(species))}")
-                pdf.savefig()
-                plt.close()
-        
-        print(f"Plots saved in {pdf_path}")
+    #This function takes as inputs: 
+    #    mice_diss: list of dissimilarity data_frames for each mouse
+    #    output_dir: directory where you want to save the pdf
+    #    n_species_per_plot: how many species you want per plot
+    #    if ma = True: you're computing the moving average, you should also indicate the window_size for the average
+    
+    if os.path.exists(output_dir) and any(f.endswith(".pdf") for f in os.listdir(output_dir)):
+        print(f"PDF files already exist in {output_dir}. Delete directory {output_dir} to regenerate plots.")
+        return  # Stop execution if any PDFs are found
+    else:
+        os.makedirs(output_dir, exist_ok=True)  # Ensure the output directory exists
+        for mouse_idx, df in enumerate(mice_diss):  # Iterate through each mouse's dataframe
+            pdf_path = os.path.join(output_dir, f"dissimilarity_{mouse_idx + 1}_plot.pdf")
+            
+            abs_pdf_path = os.path.abspath(pdf_path)
+
+            print(f"Checking existence of: {abs_pdf_path}")
+            
+            if os.path.exists(abs_pdf_path):
+                print(f"Pdf already exists: {abs_pdf_path}. Skipping.")
+                continue  # Skip if file exists
+
+            print(f"Generating and saving: {abs_pdf_path}")
+            
+            species = np.asarray(df.index)  # Get all species
+            lags = np.asarray(df.columns)  # Get lags
+            if not os.path.exists(pdf_path):  
+                with PdfPages(pdf_path) as pdf:
+                    for i in range(0, len(species), n_species_per_plot):
+                        selected_species = species[i:i + n_species_per_plot]
+                        plt.figure(figsize=(10, 6))
+                        for sp in selected_species:
+                            data = df.loc[sp].values
+                            if ma: 
+                                smoothed_data = moving_average(data, window_size=window_size)
+                                plt.plot(lags[:len(smoothed_data)], smoothed_data, label=sp)
+                            else: 
+                                plt.plot(lags, data, label=sp)
+                        
+                        plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+                        plt.xticks(rotation=45)
+                        plt.legend()
+                        plt.xlabel("Lags")
+                        plt.ylabel("Smoothed Values")
+                        plt.title(f"Mouse {mouse_idx + 1}: Species {i+1} to {min(i+n_species_per_plot, len(species))}")
+                        pdf.savefig()
+                        plt.close()
+            print(f"Plots saved in {pdf_path}")
     return 
 
 from scipy.stats import linregress
 
 
-def plot_dissfit_in_pdf(mice_diss, output_dir="Inspection_Outputs\dissimilarityfit", n_species_per_plot=5):
+def plot_dissfit_in_pdf(mice_diss, output_dir=r"Inspection_Outputs\dissimilarityfit", n_species_per_plot=5):
     """
     This function takes as inputs: 
         mice_diss: list of dissimilarity data_frames for each mouse
         output_dir: directory where you want to save the pdf
         n_species_per_plot: how many species you want per plot
     """
-    os.makedirs(output_dir, exist_ok=True)  # Ensure the output directory exists
 
-    for mouse_idx, mouse_df in enumerate(mice_diss):  # Iterate through each mouse's dataframe
-        pdf_path = os.path.join(output_dir, f"dissimilarity_{mouse_idx + 1}_fit.pdf")
-        species = np.asarray(mouse_df.index)  # Get all species
-        lags = np.asarray(mouse_df.columns, dtype = int)  # Get lags
+    if os.path.exists(output_dir) and any(f.endswith(".pdf") for f in os.listdir(output_dir)):
+        print(f"PDF files already exist in {output_dir}. Delete directory {output_dir} to regenerate plots.")
+        return  # Stop execution if any PDFs are found
+    else:
+        os.makedirs(output_dir, exist_ok=True)  # Ensure the output directory exists
+        for mouse_idx, mouse_df in enumerate(mice_diss):  # Iterate through each mouse's dataframe
+            pdf_path = os.path.join(output_dir, f"dissimilarity_{mouse_idx + 1}_fit.pdf")
+            species = np.asarray(mouse_df.index)  # Get all species
+            lags = np.asarray(mouse_df.columns, dtype = int)  # Get lags
 
-        with PdfPages(pdf_path) as pdf:
-            for i in range(0, len(species), n_species_per_plot):
-                selected_species = species[i:i + n_species_per_plot]
+            with PdfPages(pdf_path) as pdf:
+                for i in range(0, len(species), n_species_per_plot):
+                    selected_species = species[i:i + n_species_per_plot]
 
-                plt.figure(figsize=(10, 6))
-                for sp in selected_species:
-                    data = mouse_df.loc[sp].values
-                    m, q, *_ = linregress(lags, data)
-                    pred_data = m*lags + q
-                    plt.scatter(lags, data, s = 0.3, label = sp)
-                    plt.plot(lags, pred_data)
+                    plt.figure(figsize=(10, 6))
+                    for sp in selected_species:
+                        data = mouse_df.loc[sp].values
+                        m, q, *_ = linregress(lags, data)
+                        pred_data = m*lags + q
+                        plt.scatter(lags, data, s = 0.3, label = sp)
+                        plt.plot(lags, pred_data)
 
-                plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
-                plt.xticks(rotation=45)
-                plt.legend()
-                plt.xlabel("Time Lags")
-                plt.ylabel("Dissimilarity")
-                plt.title(f"Mouse {mouse_idx + 1}: dissimilarities from species {i+1} to {min(i+n_species_per_plot, len(species))}")
-                pdf.savefig()
-                plt.close()
-        
-        print(f"Plots saved in {pdf_path}")
-    return 
+                    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+                    plt.xticks(rotation=45)
+                    plt.legend()
+                    plt.xlabel("Time Lags")
+                    plt.ylabel("Dissimilarity")
+                    plt.title(f"Mouse {mouse_idx + 1}: dissimilarities from species {i+1} to {min(i+n_species_per_plot, len(species))}")
+                    pdf.savefig()
+                    plt.close()
+            
+            print(f"Plots saved in {pdf_path}")
+        return 
 
 def format_for_regression(self, subject = 1, max_rank = 10, sampling_interval = 1):
     """""
