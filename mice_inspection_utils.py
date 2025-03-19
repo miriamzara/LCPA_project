@@ -897,7 +897,7 @@ def params_to_csv(mi, mice_ab, objective, bounds, LM, find_transient_end, force_
             tau_dict[f"Mouse {mouse_num+1}"] = {sp: np.nan for sp in all_species}
             sigma_dict[f"Mouse {mouse_num+1}"] = {sp: np.nan for sp in all_species}
 
-            with PdfPages(f"Mouse_{mouse_num+1}_LM_Fits.pdf") as pdf:
+            with PdfPages(f"Inspection_Outputs\LMfits\Mouse_{mouse_num+1}_LM_Fits.pdf") as pdf:
                 fig, ax = plt.subplots(figsize=(8, 6))  # Create a single figure
                 plot_count = 0  # Counter to track species in a single figure
 
@@ -979,10 +979,11 @@ def params_to_csv(mi, mice_ab, objective, bounds, LM, find_transient_end, force_
         print(sigma_df)
 
     else:
+        print('PDF files already exist in Inspection_Outputs\LMfits. Delete directory Inspection_Outputs\LMfits to regenerate plots.')
         K_df = pd.read_csv(file_path_K)
         tau_df = pd.read_csv(file_path_tau)
         sigma_df = pd.read_csv(file_path_sigma)
-        print('Loaded K, sigma, tau dataframes from csv files')
+        print('Loaded K, sigma, tau dataframes from csv files.')
 
     return K_df, tau_df, sigma_df
 
