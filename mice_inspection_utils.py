@@ -122,6 +122,7 @@ class Mice_Inspection():
         self.metadata_df = None
         self.get_metadata(mdp)
         if not os.path.exists(op[0]):
+            os.makedirs("Data/by_mouse", exist_ok = True)
             self.format_mice_dataframes(ip, op)
         self.get_mice_df() # This method loads the processed data into self.mice_df
 
@@ -189,14 +190,17 @@ class Mice_Inspection():
         for n in range(self.subjects):
             df = pd.read_csv(self.op[n])
             # recast the column names containing days in integers for easier later access
-            df.rename(columns= {col: int(col) for col in df.columns[4:]}, inplace=True)
+            df.rename(columns= {col: int(col) for col in df.columns[1:]}, inplace=True)
             # Sort values
             if sort_by == 'mean':
-                df.sort_values(by='mean_counts', ascending=False, inplace=True)
+                temp = df.iloc[:, 1:]
+                df_sorted = df.loc[temp.mean(axis=1).sort_values(ascending = False).index]
+                df_sorted.reset_index(drop = True, inplace = True)
             else:
-                df.sort_values(by='median_counts', ascending=False, inplace=True)
-            df.reset_index(drop=True, inplace=True)
-            mice_df.append(df)
+                temp = df.iloc[:, 1:]
+                df_sorted = df.loc[temp.median(axis=1).sort_values(ascending = False).index]
+                df_sorted.reset_index(drop = True, inplace = True)
+            mice_df.append(df_sorted)
         self.mice_df = mice_df
         return self.mice_df
 
@@ -213,7 +217,9 @@ class Mice_Inspection():
         """
         for i in range(self.subjects):
             df = pd.read_csv(ip[i])
-            ######### delete multiple measures on the same day ###########
+            # --------------------------------------------------- #
+            # Rename columns and delete duplicate columns ------- #
+            # --------------------------------------------------- #
             #there are some multiple measures taken on the same day
             #they correspond to column named as "MouseAllLife-C-XXXX-Y" (mouse 1)
             #or "MouseAllLife-C-XXX-Y" (others)
@@ -240,9 +246,9 @@ class Mice_Inspection():
                     else:
                         multiple_list.append(time)
                         df.rename(columns= {col: int(parts[-2])}, inplace=True)
-            ##########################################            
+            # --------------------------------------------------- #            
             # group otus corresponding to same species
-            ##########################################
+            # --------------------------------------------------- # 
             for target in list(set(self.os_dict.values())):
                 otus_list = [otus for otus, species in self.os_dict.items() if species == target]
                 temp = df[df['otu'].isin(otus_list)]
@@ -253,17 +259,14 @@ class Mice_Inspection():
                     df.drop(index=temp.index[1:], inplace= True)
                     df.reset_index(drop=True, inplace=True)
             df.rename(columns={'otu': 'species'}, inplace = True)
-            ###########################################
-            # Add columns with mean counts and median counts
-            df.insert(1, "mean_counts", df.iloc[:, 1:].mean(axis=1))
-            df.insert(1, "median_counts", df.iloc[:, 1:].median(axis=1))
-            ###########################################
-            # Sort values
-            df.sort_values(by='mean_counts', ascending=False, inplace=True)
-            df.reset_index(drop=True, inplace=True)
+            # -------------------------------------------------- #
+            # Sort rows by mean counts 
+            # --------------------------------------------------
+            temp = df.iloc[:, 1:]
+            df_sorted = df.loc[temp.sum(axis=1).sort_values().index].copy()
+            df_sorted.reset_index(drop = True, inplace = True)
             # Save output
-            ###########################################
-            df.to_csv(op[i])
+            df_sorted.to_csv(op[i], index = False)
         return
 
     def transpose_mice_df(self) -> None:
@@ -273,8 +276,8 @@ class Mice_Inspection():
         """
         for n in range(self.subjects):
             df =  self.mice_df[n].copy()
-            days = df.columns[4:].to_list() 
-            df.drop(columns=['median_counts', 'mean_counts', 'Unnamed: 0'], inplace = True)
+            days = df.columns[1:].to_list() 
+            #df.drop(columns=['median_counts', 'mean_counts', 'Unnamed: 0'], inplace = True)
             df = df.set_index('species').transpose()
             df.reset_index(inplace = True, drop = True)
             df.insert(0, 'day', days)
@@ -283,12 +286,13 @@ class Mice_Inspection():
             df = df.reindex(full_day_range)
             df.reset_index(inplace=True)
             df.rename(columns={'index': 'day'}, inplace=True)
-            if not os.path.exists('Data'):
-                os.makedirs('Data')
-            output_path = os.path.join("Data", f"mouse_{n + 1}_transposed.csv")
-            df.to_csv(output_path)
+            if not os.path.exists('Data/by_mouse_transposed'):
+                os.makedirs('Data/by_mouse_transposed')
+            output_path = os.path.join("Data/by_mouse_transposed", f"mouse_{n + 1}_transposed.csv")
+            df.to_csv(output_path, index = False)
         return 
-
+    
+    """
     def interpolate_mice_df(self, max_rank = 4):
         selected_species = self.select_species(max_rank)
         interpolated_df_list = []
@@ -319,7 +323,7 @@ class Mice_Inspection():
             interpolated_df_list.append(interpolated_df)
             interpolated_df.to_csv(output_path)
         return interpolated_df_list
-
+    """
 
     def sort_species(self, max_rank: int = None, sorting_criterion: str = 'mean', write_csv: bool = True) -> list:
         """
