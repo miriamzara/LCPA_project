@@ -480,12 +480,12 @@ class Mice_Inspection():
         for n in range(self.subjects):
             species_data = []
             df = self.mice_df[n].copy()
-            df = df[df['species'] == species].iloc[:, 4:] # skip columns [unnamed, species, mean, median]
-            #check if species is sampled for mouse n
+            df = df[df['species'] == species].iloc[:, 1:] # skip columns [species]
+            #check if measures were made that day
             if not df.empty:
                 for day in days:
                     if not day in df.columns  or df[day].empty:
-                        species_data.append({'day': day, f'mouse_{n + 1}': 0})
+                        species_data.append({'day': day, f'mouse_{n + 1}': np.nan})
                     else:
                         species_data.append({'day': day, f'mouse_{n + 1}': df[day].iloc[0]})
             # Handle the case where the species is not sampled for mouse n
@@ -559,7 +559,8 @@ class Mice_Inspection():
                 days = list(species_df['day'])
                 intersected_columns = [col for col in mouse_columns if col in species_df.columns]
                 for i, column in enumerate(intersected_columns):
-                    valid_data_df = species_df[['day', column]].dropna()
+                    valid_data_df = species_df[['day', column]].dropna() #
+                    # valid_data_df = species_df[['day', column]].dropna()
                     if not valid_data_df.empty:
                         last_day_index = max(j for j, x in enumerate(species_df[column]) if not np.isnan(x))
                         days_of_life = days[:last_day_index + 1]
@@ -577,8 +578,11 @@ class Mice_Inspection():
                                         linewidth = 0.5,
                                         linestyle=linestyles[i % len(linestyles)],
                                         color = colors(i))
+                            axes[s].set_xlabel("day", fontsize = 'large')
+                            axes[s].set_xlabel("reads", fontsize = 'large' )
                         else:
-                            axes[s].scatter(species_df['day'], species_df[column], 
+
+                            axes[s].scatter(x_known, y_known, 
                                     label=column,
                                     alpha=1,
                                     marker=markers[i % len(markers)],
@@ -588,6 +592,18 @@ class Mice_Inspection():
                                         linewidth = 0.5,
                                         linestyle=linestyles[i % len(linestyles)],
                                         color = colors(i))
+                            axes[s].set_xlabel("day")
+                            axes[s].set_xlabel("reads")
+                            #axes[s].scatter(species_df['day'], species_df[column], 
+                            #        label=column,
+                            #        alpha=1,
+                            #        marker=markers[i % len(markers)],
+                            #        color = colors(i))
+                            #axes[s].plot(x_known, y_known,
+                            #            alpha=1,
+                            #            linewidth = 0.5,
+                            #            linestyle=linestyles[i % len(linestyles)],
+                            #            color = colors(i))
                 if len(subjects) > 1:
                     axes[s].scatter(species_df['day'], species_df['mean'], color = 'black')
                     valid_data = species_df[['day', 'mean', 'std']].dropna()
@@ -611,6 +627,70 @@ class Mice_Inspection():
                 print(f"saved as {output_path}")
                 plt.close()
         return
+
+    def plot_species_NEW(self,  species = 'Prevotella sp. Smarlab 121567',  subjects: list = None,  save_fig = False, output_path = None) -> None:
+        """
+        New version with improvements. The old version still works.
+        This version can be used to plot ONE SPECIES only,
+        with mean and std calculated across all subjects, 
+        and a custom number of individual subject lines 
+        (plotting for all mice is not suggested since plot becomes too cluttered)
+        """
+        #assert (isinstance(species_list, list)), "Species must be a list, like [Prevotella, Clostridium, Lactobacillus]"
+        
+        if subjects is None:
+            subjects = list(range(1, self.subjects + 1))
+        else:
+            assert (isinstance(subjects, list)), f"Subjects must be a list of integers in the range 1 (included) to {len(self.subjects)} (included)"
+            assert all(isinstance(n, int) for n in subjects), f"Subjects must be a list of integers in the range 1 (included) to {len(self.subjects)} (included)"
+            assert all(n <= self.subjects for n in subjects), f"Subjects must be a list of integers in the range 1 (included) to {len(self.subjects)} (included)"
+
+        mouse_columns = [f'mouse_{n}' for n in subjects if n < (self.subjects + 1)]
+        fig, ax = plt.subplots(figsize = (10, 4))
+        colors = cm.get_cmap('tab10')
+        imput_path = os.path.join("Data", "by_species", f"{species}.csv")
+        while not os.path.exists(imput_path):
+            species_df = self.get_species_df(species)
+        species_df = pd.read_csv(imput_path)
+        intersected_columns = [col for col in mouse_columns if col in species_df.columns]
+        for i, column in enumerate(intersected_columns):
+            valid_data_df = species_df[['day', column]].dropna() #
+            if not valid_data_df.empty:
+                #last_day_index = max(j for j, x in enumerate(species_df[column]) if not np.isnan(x))
+                #days_of_life = days[:last_day_index + 1]
+                x_known = valid_data_df['day']
+                y_known =  valid_data_df[column]
+                ax.scatter(x_known, y_known, 
+                        label=column,
+                        alpha=1,
+                        #marker=markers[i % len(markers)],
+                        color = colors(i))
+                ax.plot(x_known, y_known,
+                            alpha=1,
+                            linewidth = 0.5,
+                            #linestyle=linestyles[i % len(linestyles)],
+                            color = colors(i))
+                ax.set_xlabel("Day", fontsize = 'large')
+                ax.set_ylabel("Reads", fontsize = 'large')
+        # Plot mean and std
+        #ax.scatter(species_df['day'], species_df['mean'], color = 'black')
+        valid_data = species_df[['day', 'mean', 'std']].dropna()
+        ax.plot(valid_data['day'], valid_data['mean'], color = 'black', linewidth = 1.5, label = 'mean (all mice)')
+        ax.fill_between(x=valid_data['day'], y1 = np.maximum(valid_data['mean'] - valid_data['std'], 0), y2=valid_data['mean'] + valid_data['std'], color='black', alpha=0.25, label = 'std (all mice)')
+        ax.set_title(f'{species}',  fontsize = 'x-large')
+        ax.legend( fontsize = 'large', loc = 'upper right')
+        ax.grid(True)
+        plt.tight_layout()
+        if save_fig:
+            plt.savefig(output_path, dpi = 500)
+            print(f"saved as {output_path}")
+            plt.close()
+        return
+
+
+
+
+
 
     def get_dissimilarities(self, mouse, write = True):
         """
