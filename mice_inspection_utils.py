@@ -646,7 +646,7 @@ class Mice_Inspection():
             assert all(n <= self.subjects for n in subjects), f"Subjects must be a list of integers in the range 1 (included) to {len(self.subjects)} (included)"
 
         mouse_columns = [f'mouse_{n}' for n in subjects if n < (self.subjects + 1)]
-        fig, ax = plt.subplots(figsize = (10, 4))
+        fig, ax = plt.subplots(figsize = (5, 4))
         colors = cm.get_cmap('tab10')
         imput_path = os.path.join("Data", "by_species", f"{species}.csv")
         while not os.path.exists(imput_path):
@@ -687,7 +687,31 @@ class Mice_Inspection():
             plt.close()
         return
 
-
+    def plot_species_MEAN_ONLY(self,  species_list = ['Prevotella sp. Smarlab 121567'],  save_fig = False, output_path = None) -> None:
+        assert (isinstance(species_list, list)), "Species must be a list, like [Prevotella, Clostridium, Lactobacillus]"
+        fig, ax = plt.subplots(figsize = (5, 4))
+        colors = cm.get_cmap('tab10')
+        for i,species in enumerate(species_list):
+            imput_path = os.path.join("Data", "by_species", f"{species}.csv")
+            while not os.path.exists(imput_path):
+                species_df = self.get_species_df(species)
+            species_df = pd.read_csv(imput_path)
+            # Plot mean and std
+            valid_data = species_df[['day', 'mean', 'std']].dropna()
+            ax.plot(valid_data['day'], valid_data['mean'], linewidth = 1.5, color = colors(i % 10), label = f'{species}')
+            ax.fill_between(x=valid_data['day'], y1 = np.maximum(valid_data['mean'] - valid_data['std'], 0), y2=valid_data['mean'] + valid_data['std'], color = colors(i % 10), alpha=0.25)
+        ax.set_xlabel("Day", fontsize = 'large')
+        ax.set_ylabel("Reads", fontsize = 'large')
+        legend = ax.legend( fontsize = 'large', loc = 'upper right')
+        for line in legend.get_lines():
+            line.set_linewidth(10)
+        ax.grid(True)
+        plt.tight_layout()
+        if save_fig:
+            plt.savefig(output_path, dpi = 500)
+            print(f"saved as {output_path}")
+            plt.close()
+        return
 
 
 
