@@ -687,9 +687,9 @@ class Mice_Inspection():
             plt.close()
         return
 
-    def plot_species_MEAN_ONLY(self,  species_list = ['Prevotella sp. Smarlab 121567'],  save_fig = False, output_path = None) -> None:
+    def plot_species_MEAN_ONLY(self,  species_list = ['Prevotella sp. Smarlab 121567'], size = (5,4), save_fig = False, output_path = None) -> None:
         assert (isinstance(species_list, list)), "Species must be a list, like [Prevotella, Clostridium, Lactobacillus]"
-        fig, ax = plt.subplots(figsize = (5, 4))
+        fig, ax = plt.subplots(figsize = size)
         colors = cm.get_cmap('tab10')
         for i,species in enumerate(species_list):
             imput_path = os.path.join("Data", "by_species", f"{species}.csv")
