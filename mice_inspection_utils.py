@@ -764,7 +764,58 @@ class Mice_Inspection():
         
         # Return the DataFrame as output
         return dissimilarity_df
-    
+
+
+def get_dissimilarities_genus(mouse, write = True):
+    """
+        Computes dissimilarities for each species in a given mouse dataset and saves values in a csv file if write = True
+        The output is a DataFrame where each row corresponds to a species, and columns are time lags (T).
+        Only valid time lags (with computed dissimilarities) will appear as columns.
+    """
+    if write: 
+        output_dir = 'Data/dissimilarities_genus'
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, f'dissimilarity_{mouse}.csv')
+
+    # Select mouse dataframe
+    mouse_df = pd.read_csv(f'Data/by_mouse_genus_aggregated/mouse_{mouse-1}_genus.csv')
+    days = mouse_df.columns[1:-2].to_numpy(dtype=int)  # Days are from the 2nd column until last two
+    mouse_df.columns = [int(c) if c.isdigit() else c for c in mouse_df.columns]
+    max_T = np.max(days)
+
+        # Initialize a dictionary to store dissimilarities for each genus
+    dissimilarity_data = {ge: {} for ge in mouse_df['Genus'].to_numpy()}
+
+        # Precompute which days + T are valid for each day
+    valid_day_pairs = {T: {day for day in days if (day + T) in days} for T in range(1, max_T + 1)}
+
+        # For each genus, compute dissimilarities by time lag
+    for ge_idx, ge in enumerate(mouse_df['Genus'].to_numpy()):
+        for T in range(1, max_T + 1):
+            total_diss = 0
+            count = 0
+            for day in valid_day_pairs[T]:
+                diss_t = ((mouse_df[day][ge_idx] - mouse_df[day + T][ge_idx]) / 
+                            max(1, (mouse_df[day][ge_idx] + mouse_df[day + T][ge_idx])))**2
+                total_diss += diss_t
+                count += 1
+
+            # Only store dissimilarities for time lags with valid days
+            if count > 0:
+                dissimilarity_data[ge][f'{T}'] = total_diss / count
+
+        # Convert the dissimilarity data dictionary to a DataFrame
+    dissimilarity_df = pd.DataFrame.from_dict(dissimilarity_data, orient='index')
+
+    # Save the DataFrame to a CSV file
+    if write: 
+        dissimilarity_df.to_csv(output_path)
+        # Print a message with the output path
+        print(f"Dissimilarities for genus saved for mouse {mouse} at {output_path}")
+        
+        # Return the DataFrame as output
+    return dissimilarity_df
+
 def moving_average(data, window_size=5):
     return np.convolve(data, np.ones(window_size)/window_size, mode='valid')
 
@@ -820,6 +871,59 @@ def plot_dissimilarities_in_pdf(mice_diss, output_dir=r"Inspection_Outputs\dissi
                         plt.close()
             print(f"Plots saved in {pdf_path}")
     return 
+
+def plot_dissimilarities_genus_in_pdf(mice_diss, output_dir=r"Inspection_Outputs\dissimilarityplots_genus", n_genus_per_plot=5, window_size=10, ma = True):
+    
+    #This function takes as inputs: 
+    #    mice_diss: list of dissimilarity data_frames for each mouse
+    #    output_dir: directory where you want to save the pdf
+    #    n_species_per_plot: how many species you want per plot
+    #    if ma = True: you're computing the moving average, you should also indicate the window_size for the average
+    
+    if os.path.exists(output_dir) and any(f.endswith(".pdf") for f in os.listdir(output_dir)):
+        print(f"PDF files already exist in {output_dir}. Delete directory {output_dir} to regenerate plots.")
+        return  # Stop execution if any PDFs are found
+    else:
+        os.makedirs(output_dir, exist_ok=True)  # Ensure the output directory exists
+        for mouse_idx, df in enumerate(mice_diss):  # Iterate through each mouse's dataframe
+            pdf_path = os.path.join(output_dir, f"dissimilarity_{mouse_idx + 1}_plot.pdf")
+            
+            abs_pdf_path = os.path.abspath(pdf_path)
+
+            print(f"Checking existence of: {abs_pdf_path}")
+            
+            if os.path.exists(abs_pdf_path):
+                print(f"Pdf already exists: {abs_pdf_path}. Skipping.")
+                continue  # Skip if file exists
+
+            print(f"Generating and saving: {abs_pdf_path}")
+            
+            genuses = np.asarray(df.index)  # Get all genuses
+            lags = np.asarray(df.columns)  # Get lags
+            if not os.path.exists(pdf_path):  
+                with PdfPages(pdf_path) as pdf:
+                    for i in range(0, len(genuses), n_genus_per_plot):
+                        selected_genuses = genuses[i:i + n_genus_per_plot]
+                        plt.figure(figsize=(10, 6))
+                        for ge in selected_genuses:
+                            data = df.loc[ge].values
+                            if ma: 
+                                smoothed_data = moving_average(data, window_size=window_size)
+                                plt.plot(lags[:len(smoothed_data)], smoothed_data, label=ge)
+                            else: 
+                                plt.plot(lags, data, label=ge)
+                        
+                        plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+                        plt.xticks(rotation=45)
+                        plt.legend()
+                        plt.xlabel("Lags")
+                        plt.ylabel("Dissimilarity (Smoothed Values)")
+                        plt.title(f"Mouse {mouse_idx + 1}: Genus {i+1} to {min(i+n_genus_per_plot, len(genuses))}")
+                        pdf.savefig()
+                        plt.close()
+            print(f"Plots saved in {pdf_path}")
+    return 
+
 
 def plot_dissfit_in_pdf(mice_diss, output_dir=r"Inspection_Outputs\dissimilarityfit", n_species_per_plot=5):
     """
