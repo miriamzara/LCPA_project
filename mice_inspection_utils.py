@@ -713,6 +713,8 @@ class Mice_Inspection():
             plt.savefig(output_path, dpi = 500)
             print(f"saved as {output_path}")
             plt.close()
+        else:
+            plt.show()
         return
 
 
