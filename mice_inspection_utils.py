@@ -1,16 +1,12 @@
-import random
 from typing import Union
 import numpy as np
-import seaborn as sns
 import pandas as pd
 import re
 import os
 import scipy.optimize as opt
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
-from scipy.interpolate import CubicSpline
 import matplotlib.cm as cm
-from scipy.optimize import minimize
 from matplotlib.backends.backend_pdf import PdfPages
 from scipy.stats import linregress
 
@@ -49,25 +45,15 @@ class Mice_Inspection():
     format_mice_dataframes(ip, op):
         Formats raw mice data and saves the results to specified output paths.
     
-    transpose_mice_df():
-        Transposes each mouse's dataframe, sorting species by abundance and filling missing days.
-    
-    interpolate_mice_df():
-        Interpolates each mouse's dataframe with cubic splines method
-
-    select_species():
-        Returns the list of the species which appear with rank <= chosen rank in some mouse
-
-    make_stacked_bar_plot():
-        Makes stacked bar plot
-
     get_species_df(species):
         Creates and saves the aggregated data of species in a csv file where the first column is days and subsequent
         columns correspond to mice.
     
-    plot_species(list):
+    plot_species_NEW(list):
         Plots the time series of abundances for the selected list of species. Returns pdf file(s) containing the plots.
         
+    plot_species_MEAN_ONLY(list):
+
     get_dissimilarities_df(mouse, write = True): 
         Computes and saves (only if write = True) dissimilarities for each species (rows) and for each time lag (columns) in the correspondent mouse dataset.
         The  output files are saved in the 'Data/dissimilarities' directory with filenames 'dissimilarity_<mouse>.csv'
@@ -270,83 +256,9 @@ class Mice_Inspection():
             df_sorted.to_csv(op[i], index = False)
         return
 
-    def transpose_mice_df(self) -> None:
-        """
-        Transposes the mice dataframes and fills missing days with NaN values.
-        Creates CSV outputs with day as the first column and species in subsequent columns.
-        """
-        for n in range(self.subjects):
-            df =  self.mice_df[n].copy()
-            days = df.columns[1:].to_list() 
-            #df.drop(columns=['median_counts', 'mean_counts', 'Unnamed: 0'], inplace = True)
-            df = df.set_index('species').transpose()
-            df.reset_index(inplace = True, drop = True)
-            df.insert(0, 'day', days)
-            full_day_range = pd.Series(range(df['day'].min(), df['day'].max() + 1))
-            df.set_index('day', inplace=True)
-            df = df.reindex(full_day_range)
-            df.reset_index(inplace=True)
-            df.rename(columns={'index': 'day'}, inplace=True)
-            if not os.path.exists('Data/by_mouse_transposed'):
-                os.makedirs('Data/by_mouse_transposed')
-            output_path = os.path.join("Data/by_mouse_transposed", f"mouse_{n + 1}_transposed.csv")
-            df.to_csv(output_path, index = False)
-        return 
-    
-    def sort_species(self, max_rank: int = None, sorting_criterion: str = 'mean', write_csv: bool = True) -> list:
-        """
-        For each species in the dataset, extract the mean (or median) count across all subjects. Computes the global mean (or median).
-        Returns a .csv file with columns ['species', 'mean_subject_1', ... mean_subject_N', 'global_mean'] (or median).
-        Returns also a list of the first max_rank species. If max_rank is None or outside the range, all species are returned.
-        """
-        if write_csv:
-            output_dir = os.path.join('Data', 'by_species')
-            os.makedirs(output_dir, exist_ok=True)
-            output_path = os.path.join('Data', 'by_species', f'{sorting_criterion}:{max_rank}_sorted.csv')
-        if not max_rank is None:
-            if not (isinstance(max_rank, int) and max_rank > 1):
-                raise ValueError("max rank must be a positive integer")
-        if not sorting_criterion in ['mean', 'median']:
-            raise ValueError("sorting criterion must be 'mean' or 'median'")
-        
-        species_data = []
-        for species in self.species_list:
-            mean_counts = []
-            median_counts = []
-            for mouse in range(self.subjects):
-                # If the species appear, extract the mean and median count
-                temp = self.mice_df[mouse][self.mice_df[mouse]['species'] == species]
-                if not temp.empty:
-                    mean_counts.append(temp['mean_counts'].iloc[0])
-                    median_counts.append(temp['median_counts'].iloc[0])
-                else:
-                    mean_counts.append(0)
-                    median_counts.append(0)
-            global_mean = np.mean(mean_counts)
-            global_median = np.mean(median_counts)
-            species_data.append({'species': species, 'global_mean': global_mean, 'global_median': global_median})
-            df = pd.DataFrame(species_data)
-
-        if sorting_criterion == 'median':
-            df.sort_values(by= 'global_median', ascending=False, inplace=True)
-            df.reset_index(drop=True, inplace=True)
-        if sorting_criterion == 'mean':
-            df.sort_values(by= 'global_mean', ascending=False, inplace=True)
-            df.reset_index(drop=True, inplace=True)
-                
-        selected_species = df['species'].tolist()
-        if max_rank is not None:
-            max_rank = min(max_rank, len(df))
-            # Cut the dataframe to the first max_rank species
-            df = df.iloc[:max_rank]
-            selected_species = df['species'].tolist()
-        if write_csv:
-            df.to_csv(output_path)
-            print(f"Saved as {output_path}")
-        return selected_species
-    
     def get_species_df(self, species = 'Prevotella sp. Smarlab 121567', output_dir = "Data/by_species", plot_fig = True, save_fig = True) -> Union[list, pd.DataFrame]:
         """"
+        Used by plot_species_NEW and plot_species_MEAN_ONLY
         Returns the aggregated dataframe containing the timeseries
         for the desired species across all subjects.
         Saves dataframe to .csv file "Data/by_species/[species name].csv"
